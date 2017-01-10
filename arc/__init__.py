@@ -115,7 +115,7 @@ class HashThrough(object):
     return self.hasher.hexdigest()
 
   def hashed(self):
-    return ''.join(self.data)
+    return b''.join(self.data)
 
 def validate_arc_signature_fields(sig):
     """Validate ARC-Message-Signature fields.
@@ -180,7 +180,7 @@ class ARC(object):
   ARC_HEADERS = (b'arc-seal', b'arc-message-signature', b'arc-authentication-results')
 
   #: Regex to extract i= value from ARC headers
-  INSTANCE_RE = re.compile(r'[\s;]?i\s*=\s*(\d+)', re.MULTILINE | re.IGNORECASE)
+  INSTANCE_RE = re.compile(br'[\s;]?i\s*=\s*(\d+)', re.MULTILINE | re.IGNORECASE)
 
   #: Create an ARC instance to sign and verify rfc5322 messages.
   #:
@@ -267,16 +267,10 @@ class ARC(object):
     if len(headers) == 0:
       return 0, []
 
-    def arc_header_sort(a, b):
-      if a[0] != b[0]:
-        return cmp(a[0], b[0])
+    def arc_header_key(a):
+      return [a[0], a[1][0].lower(), a[1][1].lower()]
 
-      if a[1][0].lower() != b[1][0].lower():
-        return cmp(a[1][0].lower(), b[1][0].lower())
-
-      return cmp(a[1][1].lower(), b[1][1].lower())
-
-    headers.sort(arc_header_sort)
+    headers = sorted(headers, key=arc_header_key)
     headers.reverse()
     return headers[0][0], headers
 
@@ -309,7 +303,7 @@ class ARC(object):
   #: @raise ARCException: when the message, include_headers, or key are badly
   #: formed.
   def sign(self, selector, domain, privkey, auth_results, chain_validation_status,
-        include_headers=None):
+           include_headers=None, timestamp=None, standardize=True):
     try:
         pk = parse_pem_private_key(privkey)
     except UnparsableKeyError as e:
@@ -331,8 +325,9 @@ class ARC(object):
       raise ParameterError("cv=none not allowed on instance %d" % instance)
 
     new_arc_set = []
+
     aar_value = b"i=%d; %s" % (instance, auth_results)
-    if aar_value[-1] != b'\n': aar_value += '\r\n'
+    if aar_value[-1] != b'\n': aar_value += b'\r\n'
     new_arc_set.append(b"ARC-Authentication-Results: " + aar_value)
     self.headers.insert(0, (b"arc-authentication-results", aar_value))
     arc_headers.insert(0, (b"ARC-Authentication-Results", aar_value))
@@ -364,23 +359,32 @@ class ARC(object):
     self.logger.debug("sign ams body hashed: %r" % h.hashed())
     bodyhash = base64.b64encode(h.digest())
 
+    timestamp = str(timestamp or int(time.time())).encode('ascii')
+
     ams_fields = [x for x in [
         (b'i', str(instance).encode('ascii')),
         (b'a', self.signature_algorithm),
         (b'd', domain),
         (b's', selector),
-        (b't', str(int(time.time())).encode('ascii')),
+        (b't', timestamp),
         (b'h', b" : ".join(include_headers)),
         (b'bh', bodyhash),
         # Force b= to fold onto it's own line so that refolding after
         # adding sig doesn't change whitespace for previous tags.
         (b'b', b'0'*60),
     ] if x]
+
+    if standardize:
+        ams_fields = [(x,y.lower().replace(b' ', b'')) for (x,y) in ams_fields]
+        idx = [i for i in range(len(ams_fields)) if ams_fields[i][0] == b'bh'][0]
+        ams_fields[idx] = (b'bh', bodyhash.replace(b' ', b''))
+        ams_fields = sorted(ams_fields, key=(lambda x: x[0]))
+
     include_headers = [x.lower() for x in include_headers]
     # record what verify should extract
     self.include_headers = tuple(include_headers)
 
-    ams_value = fold(b"; ".join(b"=".join(x) for x in ams_fields))
+    ams_value = b"; ".join(b"=".join(x) for x in ams_fields)
     ams_value = RE_BTAG.sub(b'\\1',ams_value)
     ams_header = (b'ARC-Message-Signature', b' ' + ams_value)
     h = HashThrough(hasher())
@@ -399,7 +403,11 @@ class ARC(object):
     # Instead of leaving unfolded (which lets an MTA fold it later and still
     # breaks yahoo and live.com), we change the default signing mode to
     # relaxed/simple (for broken receivers), and fold now.
-    ams_value = fold(ams_value + base64.b64encode(bytes(sig2))) + "\r\n"
+    idx = [i for i in range(len(ams_fields)) if ams_fields[i][0] == b'b'][0]
+    ams_fields[idx] = (b'b', base64.b64encode(bytes(sig2)))
+    ams_value = b"; ".join(b"=".join(x) for x in ams_fields) + b"\r\n"
+    if not standardize:
+        ams_value = fold(ams_value)
 
     new_arc_set.append(b"ARC-Message-Signature: " + ams_value)
     self.headers.insert(0, (b"ARC-Message-Signature", ams_value))
@@ -413,16 +421,21 @@ class ARC(object):
         (b'a', self.signature_algorithm),
         (b'd', domain),
         (b's', selector),
-        (b't', str(int(time.time())).encode('ascii')),
+        (b't', timestamp),
         # Force b= to fold onto it's own line so that refolding after
         # adding sig doesn't change whitespace for previous tags.
         (b'b', b'0'*60),
     ] if x]
+
+    if standardize:
+        as_fields = [(x,y.lower().replace(b' ', b'')) for (x,y) in as_fields]
+        as_fields = sorted(as_fields, key=(lambda x: x[0]))
+
     as_include_headers = [x[0].lower() for x in arc_headers]
     as_include_headers.reverse()
     as_headers = canon_policy.canonicalize_headers(arc_headers)
 
-    as_value = fold(b"; ".join(b"=".join(x) for x in as_fields))
+    as_value = b"; ".join(b"=".join(x) for x in as_fields)
     as_value = RE_BTAG.sub(b'\\1',as_value)
     as_header = (b'ARC-Seal', b' ' + as_value)
     h = HashThrough(hasher())
@@ -441,7 +454,11 @@ class ARC(object):
     # Instead of leaving unfolded (which lets an MTA fold it later and still
     # breaks yahoo and live.com), we change the default signing mode to
     # relaxed/simple (for broken receivers), and fold now.
-    as_value = fold(as_value + base64.b64encode(bytes(sig2))) + b"\r\n"
+    idx = [i for i in range(len(as_fields)) if as_fields[i][0] == b'b'][0]
+    as_fields[idx] = (b'b', base64.b64encode(bytes(sig2)))
+    as_value = b"; ".join(b"=".join(x) for x in as_fields) + b"\r\n"
+    if not standardize:
+        ams_value = fold(ams_value)
 
     new_arc_set.append(b"ARC-Seal: " + as_value)
     self.headers.insert(0, (b"ARC-Seal", as_value))
@@ -611,6 +628,7 @@ class ARC(object):
     except (TypeError,DigestTooLargeError) as e:
         raise KeyFormatError("digest too large for modulus: %s"%e)
     output['ams-valid'] = ams_valid
+    logger.debug("ams valid: %r" % ams_valid)
 
     # Validate Arc-Seal
     try:
@@ -651,12 +669,14 @@ class ARC(object):
     except (TypeError,DigestTooLargeError) as e:
         raise KeyFormatError("digest too large for modulus: %s"%e)
     output['as-valid'] = as_valid
+    logger.debug("as valid: %r" % as_valid)
     return output
 
 def sign(message, selector, domain, privkey,
          auth_results, chain_validation_status,
          signature_algorithm=b'rsa-sha256',
-         include_headers=None, logger=None):
+         include_headers=None, timestamp=None,
+         logger=None):
     """Sign an RFC822 message and return the ARC set header lines for the next instance
     @param message: an RFC822 formatted message (with either \\n or \\r\\n line endings)
     @param selector: the DKIM selector value for the signature
@@ -667,13 +687,15 @@ def sign(message, selector, domain, privkey,
     @param signature_algorithm: the signing algorithm to use when signing
     @param include_headers: a list of strings indicating which headers are to be signed (default all headers not listed as SHOULD NOT sign)
     @param logger: a logger to which debug info will be written (default None)
+    @param timestamp: a forced timestamp for testing purposes (default None)
     @return: A list containing the ARC set of header fields for the next instance
     @raise ARCException: when the message, include_headers, or key are badly formed.
     """
     a = ARC(message,logger=logger,signature_algorithm=signature_algorithm)
     if not include_headers:
         include_headers = a.default_sign_headers()
-    return a.sign(selector, domain, privkey, auth_results, chain_validation_status, include_headers=include_headers)
+
+    return a.sign(selector, domain, privkey, auth_results, chain_validation_status, include_headers=include_headers, timestamp=timestamp)
 
 def verify(message, logger=None, dnsfunc=get_txt, minkey=1024):
     """Verify the ARC chain on an RFC822 formatted message.
