@@ -21,21 +21,25 @@
 # This has been modified from the original software.
 # Copyright (c) 2011,2012 Scott Kitterman <scott@kitterman.com>
 
-from distutils.core import setup
+from setuptools import setup
 import os
 
-version = "0.5.6"
+version = "0.5.7.dev1"
 
 setup(
-    name = "dkimpy",
+    name = "mn-dkimpy",
     version = version,
-    description = "DKIM (DomainKeys Identified Mail)",
+    description = "DKIM (DomainKeys Identified Mail) - unofficial upstream release",
     long_description =
     """dkimpy is a Python library that implements DKIM (DomainKeys
-Identified Mail) email signing and verification.""",
+Identified Mail) email signing and verification. This is an UNOFFICIAL manual release as
+upstream on launchpad does not seem to release bugfixes to the Cheeseshop regularly.
+Do not rely on this package too much, since I might only update it for my personal needs.""",
     author = "Scott Kitterman",
     author_email = "scott@kitterman.com",
-    url = "https://launchpad.net/dkimpy",
+    maintainer = "Jonas Maurus (@jdelic)",
+    maintainer_email = "jonas-dkimpy@gopythongo.com",
+    url = "https://github.com/oasiswork/dkimpy",
     license = "BSD-like",
     packages = ["dkim"],
     scripts = ["dkimsign.py", "dkimverify.py"],
