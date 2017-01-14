@@ -3,3 +3,9 @@
 __pycache__
 /.testrepository
 *.egg-info
+.git
+*.iml
+.env
+.idea
+dist/
+build/
