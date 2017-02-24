@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/Library/Frameworks/Python.framework/Versions/3.5/bin/python3
 
 # This software is provided 'as-is', without any express or implied
 # warranty.  In no event will the author be held liable for any damages

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/Library/Frameworks/Python.framework/Versions/3.5/bin/python3
 
 # This software is provided 'as-is', without any express or implied
 # warranty.  In no event will the author be held liable for any damages
@@ -28,23 +28,39 @@
 from __future__ import print_function
 
 import logging
+import re
 import sys
 
 import dkim
 
+logging.basicConfig(level=10)
+
+if len(sys.argv) != 4:
+    print("Usage: arcsign.py selector domain privatekeyfile", file=sys.stderr)
+    sys.exit(1)
+
 if sys.version_info[0] >= 3:
-    # Make sys.stdin a binary stream.
+    # Make sys.stdin and stdout binary streams.
     sys.stdin = sys.stdin.detach()
+    sys.stdout = sys.stdout.detach()
+
+selector = sys.argv[1].encode('ascii')
+domain = sys.argv[2].encode('ascii')
+privatekeyfile = sys.argv[3]
 
 message = sys.stdin.read()
-verbose = '-v' in sys.argv
-if verbose:
-  logging.basicConfig(level=10)
-  a = dkim.ARC(message)
-  cv, results, comment = a.verify()
-else:
-  cv, results, comment = dkim.arc_verify(message)
 
-print("arc verification: cv=%s %s" % (cv, comment))
-if verbose:
-  print(repr(results))
+# Pick a cv status
+cv = dkim.CV_None
+if re.search('arc-seal', message, re.IGNORECASE):
+  cv = dkim.CV_Pass
+
+#try:
+sig = dkim.arc_sign(message, selector, domain, open(privatekeyfile, "rb").read(),
+               domain + ": none", cv)
+for line in sig:
+  sys.stdout.write(line)
+sys.stdout.write(message)
+#except Exception as e:
+#    print(e, file=sys.stderr)
+    #sys.stdout.write(message)

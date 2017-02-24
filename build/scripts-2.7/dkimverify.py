@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 
 # This software is provided 'as-is', without any express or implied
 # warranty.  In no event will the author be held liable for any damages
@@ -20,14 +20,9 @@
 #
 # This has been modified from the original software.
 # Copyright (c) 2011 William Grant <me@williamgrant.id.au>
-#
-# This has been modified from the original software.
-# Copyright (c) 2016 Google, Inc.
-# Contact: Brandon Long <blong@google.com>
 
 from __future__ import print_function
 
-import logging
 import sys
 
 import dkim
@@ -39,12 +34,11 @@ if sys.version_info[0] >= 3:
 message = sys.stdin.read()
 verbose = '-v' in sys.argv
 if verbose:
-  logging.basicConfig(level=10)
-  a = dkim.ARC(message)
-  cv, results, comment = a.verify()
+  d = dkim.DKIM(message)
+  res = d.verify()
 else:
-  cv, results, comment = dkim.arc_verify(message)
-
-print("arc verification: cv=%s %s" % (cv, comment))
-if verbose:
-  print(repr(results))
+  res = dkim.verify(message)
+if not res:
+    print("signature verification failed")
+    sys.exit(1)
+print("signature ok")

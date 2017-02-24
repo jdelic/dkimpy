@@ -31,7 +31,7 @@ import logging
 import re
 import sys
 
-import arc
+import dkim
 
 logging.basicConfig(level=10)
 
@@ -51,16 +51,13 @@ privatekeyfile = sys.argv[3]
 message = sys.stdin.read()
 
 # Pick a cv status
-cv = arc.CV_None
+cv = dkim.CV_None
 if re.search('arc-seal', message, re.IGNORECASE):
-  cv = arc.CV_Pass
+  cv = dkim.CV_Pass
 
 #try:
-inc = b"From:To:Subject:arc-authentication-results".split(b':')
-auth = "lists.example.org; spf=pass smtp.mfrom=jqd@d1.example; dkim=pass (1024-bit key) header.i=@d1.example; dmarc=pass"
-sig = arc.sign(message, selector, domain, open(privatekeyfile, "rb").read(),
-               auth, cv, include_headers=inc)
-
+sig = dkim.arc_sign(message, selector, domain, open(privatekeyfile, "rb").read(),
+               domain + ": none", cv)
 for line in sig:
   sys.stdout.write(line)
 sys.stdout.write(message)
