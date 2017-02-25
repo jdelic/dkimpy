@@ -24,21 +24,11 @@ import unittest
 
 
 def test_suite():
-    from dkim.tests import (
-        test_canonicalization,
-        test_crypto,
-        test_dkim,
-        test_util,
+    from arc.tests import (
         test_arc,
-        test_dnsplug,
         )
     modules = [
-        test_canonicalization,
-        test_crypto,
-        test_dkim,
-        test_util,
         test_arc,
-        test_dnsplug,
         ]
     suites = [x.test_suite() for x in modules]
     return unittest.TestSuite(suites)

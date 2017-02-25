@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # This software is provided 'as-is', without any express or implied
 # warranty.  In no event will the author be held liable for any damages
 # arising from the use of this software.
@@ -14,31 +16,35 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 #
+# Copyright (c) 2008 Greg Hewgill http://hewgill.com
+#
+# This has been modified from the original software.
 # Copyright (c) 2011 William Grant <me@williamgrant.id.au>
 #
 # This has been modified from the original software.
 # Copyright (c) 2016 Google, Inc.
 # Contact: Brandon Long <blong@google.com>
 
-import unittest
+from __future__ import print_function
 
+import logging
+import sys
 
-def test_suite():
-    from dkim.tests import (
-        test_canonicalization,
-        test_crypto,
-        test_dkim,
-        test_util,
-        test_arc,
-        test_dnsplug,
-        )
-    modules = [
-        test_canonicalization,
-        test_crypto,
-        test_dkim,
-        test_util,
-        test_arc,
-        test_dnsplug,
-        ]
-    suites = [x.test_suite() for x in modules]
-    return unittest.TestSuite(suites)
+import dkim
+
+if sys.version_info[0] >= 3:
+    # Make sys.stdin a binary stream.
+    sys.stdin = sys.stdin.detach()
+
+message = sys.stdin.read()
+verbose = '-v' in sys.argv
+if verbose:
+  logging.basicConfig(level=10)
+  a = dkim.ARC(message)
+  cv, results, comment = a.verify()
+else:
+  cv, results, comment = dkim.arc_verify(message)
+
+print("arc verification: cv=%s %s" % (cv, comment))
+if verbose:
+  print(repr(results))
